@@ -26,12 +26,12 @@ def parse_groups(pipeline_text):
         if line == "startgroup":
             current = {}
         elif line == "endgroup":
-            groups.append({**top, **current})
+            groups.append(current)
             current = None
         elif match := VAR.match(line):
             kind, name, value = match.groups()
             (top if current is None else current)[name] = (kind, value)
-    return groups
+    return [{**top, **group} for group in groups]
 
 
 def substitute(source, var_set):
@@ -61,7 +61,7 @@ def run_kitty(kitty, code):
 
 
 def kitty_exe_path():
-    for kitty in (shutil.which("kitty"), MAC_KITTY):
+    for kitty in (os.environ.get("KITTY"), shutil.which("kitty"), MAC_KITTY):
         out = kitty and run_kitty(kitty, "from kitty.constants import kitty_exe; print(kitty_exe())")
         if out:
             return out.decode().strip()
@@ -89,7 +89,7 @@ def main():
     kitty_exe = kitty_exe_path()
     slangc = find_slangc(os.environ, kitty_exe)
     if not kitty_exe or not slangc:
-        print("Needs kitty 0.50+ (on PATH or in /Applications) and its slangc, or set SLANGC.", file=sys.stderr)
+        print("Needs kitty 0.50+ on PATH or in /Applications (or set KITTY to its path), and the slangc beside it (or set SLANGC).", file=sys.stderr)
         return 1
     source = (HERE / "breath.slang").read_text()
     groups = parse_groups((HERE / "breath.pipeline").read_text())

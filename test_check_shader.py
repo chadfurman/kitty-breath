@@ -3,6 +3,7 @@ import re
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import check_shader
 import palette
@@ -28,6 +29,8 @@ startgroup
     var float LAG = 0.5
     shaders breath
 endgroup
+
+var int LATE = 1
 """
 
 
@@ -40,8 +43,8 @@ class ParseGroupsTest(unittest.TestCase):
     def test_parses_one_var_set_per_group(self):
         groups = check_shader.parse_groups(SMALL_PIPELINE)
         self.assertEqual(groups, [
-            {"LAG": ("float", "1.2"), "TINT": ("float3", "float3(1, 0, 0)")},
-            {"LAG": ("float", "0.5"), "TINT": ("float3", "float3(1, 0, 0)"), "MODE": ("int", "4")},
+            {"LAG": ("float", "1.2"), "TINT": ("float3", "float3(1, 0, 0)"), "LATE": ("int", "1")},
+            {"LAG": ("float", "0.5"), "TINT": ("float3", "float3(1, 0, 0)"), "LATE": ("int", "1"), "MODE": ("int", "4")},
         ])
 
 
@@ -79,6 +82,14 @@ class ShippedFilesTest(unittest.TestCase):
             for old in OLD_NAMES:
                 self.assertNotIn(old, text, f"{old} in {path.name}")
 
+    def test_breath_checks_the_radius_before_the_background(self):
+        body = SHADER.split("float4 mouse_breath(", 1)[1].split("\n}\n", 1)[0]
+        self.assertLess(body.index("length(rel) > 1.1"), body.index("lit_here(t, d)"))
+
+    def test_breath_keeps_going_while_the_pointer_is_hidden(self):
+        body = SHADER.split("float4 mouse_breath(", 1)[1].split("\n}\n", 1)[0]
+        self.assertNotIn("mouse_pointer_hidden", body)
+
     def test_sidebar_walk_only_in_sidebar_mode(self):
         calls = [line for line in SHADER.splitlines() if "mouse_in_sidebar(" in line and not line.startswith("bool ")]
         self.assertTrue(calls)
@@ -98,6 +109,17 @@ class FindSlangcTest(unittest.TestCase):
             self.assertEqual(check_shader.find_slangc({}, exe, on_path), str(beside))
             self.assertEqual(check_shader.find_slangc({}, None, on_path), "/usr/bin/slangc")
             self.assertIsNone(check_shader.find_slangc({}, None, nowhere))
+
+
+class KittyExeTest(unittest.TestCase):
+    def test_prefers_the_kitty_env_var(self):
+        seen = []
+        def run(kitty, code):
+            seen.append(kitty)
+            return b"/opt/kitty/bin/kitty\n"
+        with mock.patch.object(check_shader, "run_kitty", run), mock.patch.dict(os.environ, {"KITTY": "/opt/kitty/bin/kitty"}):
+            self.assertEqual(check_shader.kitty_exe_path(), "/opt/kitty/bin/kitty")
+        self.assertEqual(seen, ["/opt/kitty/bin/kitty"])
 
 
 class CompileTest(unittest.TestCase):

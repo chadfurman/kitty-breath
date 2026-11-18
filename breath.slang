@@ -9,9 +9,8 @@ import kitty_custom_shader_types;
 
 static const int MODE = 0;  // set per pipeline group: 0 copy frame, 2 sigh, 3 debug, 4 breath
 
-static const int REGION_ANYWHERE = 0;  // light kitty's own background, anywhere in the window
-static const int REGION_SIDEBAR = 1;   // light only SIDEBAR_COLOR, left of a DIVIDER_COLOR line (herdr)
-static const int REGION = 0;
+static const int REGION_SIDEBAR = 1;  // light only SIDEBAR_COLOR, left of a DIVIDER_COLOR line (herdr)
+static const int REGION = 0;          // any other value lights kitty's own background, anywhere
 static const float3 SIDEBAR_COLOR = float3(0.004777, 0.005182, 0.008568);  // herdr's sidebar, #0f1017
 static const float3 DIVIDER_COLOR = float3(0.672443, 0.603827, 1.0);       // herdr's divider, #d6ccff
 static const float DIVIDER_TOLERANCE = 0.04;
@@ -20,12 +19,12 @@ static const float KEY_TOLERANCE = 0.001;
 
 static const float3 GLOW = float3(0.672443, 0.603827, 1.0);  // the sigh's color
 static const float PEAK = 0.05;
-static const float HORIZON_FLOOR = 0.35;
+static const float HORIZON_FLOOR = 0.35;  // the sigh's strength at the top of the window, as a share of PEAK
 
 static const float INHALE_SECONDS = 4.0;
 static const float HOLD_SECONDS = 7.0;
 static const float EXHALE_SECONDS = 8.0;
-static const uint BREATH_SECONDS = 19;  // inhale + hold + exhale
+static const uint BREATH_SECONDS = uint(INHALE_SECONDS + HOLD_SECONDS + EXHALE_SECONDS);  // must be whole seconds
 
 static const float FILL_LAG_SECONDS = 0.0;  // how far the filled area trails the rim
 // Each layer is laid over the one below: fill, then inner light, then rim on top.
@@ -140,10 +139,10 @@ bool mouse_in_sidebar(KittyTextures t, KittyCustomShaderData d) {
 
 float4 mouse_breath(float4 color, KittyTextures t, KittyCustomShaderData d) {
     float2 m = d.mouse_pos.xy;
-    if (d.mouse_pointer_hidden > 0.5 || any(m < 0.0) || any(m > 1.0)) return color;
-    if (!lit_here(t, d)) return color;
+    if (any(m < 0.0) || any(m > 1.0)) return color;
     float2 rel = (t.pos - m) * float2(d.viewport_size_pixels) / MOUSE_RADIUS_PX;
     if (length(rel) > 1.1) return color;
+    if (!lit_here(t, d)) return color;
     if (REGION == REGION_SIDEBAR && !mouse_in_sidebar(t, d)) return color;
     float ring_r = reach(d, 0.0);
     float fill_r = reach(d, FILL_LAG_SECONDS);
