@@ -59,8 +59,8 @@ def process_name(pid):
     return os.path.basename(out.stdout.strip())
 
 
-def reload_kitty(env=os.environ, kill=os.kill, parent=os.getppid, name_of=None):
-    name_of = name_of or process_name
+def reload_kitty(env=os.environ, kill=None, parent=os.getppid, name_of=None):
+    kill, name_of = kill or os.kill, name_of or process_name
     pid = env.get("KITTY_PID", "")
     candidates = [int(pid)] if pid.isdigit() and int(pid) > 0 else []
     for target in candidates + [parent()]:

@@ -1,5 +1,6 @@
 import io
 import signal
+import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -88,6 +89,22 @@ class ReloadTest(unittest.TestCase):
     def test_reload_treats_a_failed_signal_as_no_reload(self):
         done, _ = reload({"KITTY_PID": "42"}, {42: "kitty"}, kill=mock.Mock(side_effect=ProcessLookupError))
         self.assertFalse(done)
+
+    def test_reload_uses_os_kill_at_call_time(self):
+        with mock.patch("os.kill") as kill:
+            done = palette.reload_kitty({"KITTY_PID": "42"}, parent=lambda: 7, name_of=lambda pid: "kitty")
+        self.assertTrue(done)
+        kill.assert_called_once_with(42, signal.SIGUSR1)
+
+    def test_process_name_reads_the_command_basename(self):
+        ps = mock.Mock(stdout="/Applications/kitty.app/Contents/MacOS/kitty\n")
+        with mock.patch.object(palette.subprocess, "run", return_value=ps) as run:
+            self.assertEqual(palette.process_name(42), "kitty")
+        self.assertEqual(run.call_args.args[0], ["ps", "-p", "42", "-o", "comm="])
+
+    def test_process_name_is_empty_when_ps_fails(self):
+        with mock.patch.object(palette.subprocess, "run", side_effect=subprocess.TimeoutExpired("ps", 5)):
+            self.assertEqual(palette.process_name(42), "")
 
     def test_reload_without_kitty_pid_prints_how(self):
         for env in ({}, {"KITTY_PID": "abc"}, {"KITTY_PID": "0"}, {"KITTY_PID": "-5"}):
