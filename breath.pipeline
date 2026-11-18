@@ -1,0 +1,51 @@
+textures b
+
+# How far the fill trails the rim.
+var float FILL_LAG_SECONDS = 1.2
+
+# herdr users: uncomment to breathe only over herdr's sidebar.
+# var int REGION = 1
+
+# palette:start (written by palette.py; edit palettes/*.conf instead)
+# palette: 2-violet
+var float3 FILL_COLOR = float3(0.155926, 0.072272, 0.791298)
+var float FILL_OPACITY = 0.04
+var float3 INNER_COLOR = float3(0.327778, 0.198069, 1.000000)
+var float INNER_OPACITY = 0.14
+var float3 RIM_COLOR = float3(0.723055, 0.644480, 1.000000)
+var float RIM_OPACITY = 0.18
+# palette:end
+
+# Keep an untouched copy of the frame so later groups can find plain background.
+startgroup
+    output_texture b
+    animation_step 33
+    shaders breath
+endgroup
+
+# The 4-7-8 breath around the mouse pointer: a rim that leads, a fill that
+# catches up, and an inner light that counts out the hold.
+startgroup
+    var int MODE = 4
+    animation_step 33
+    shaders breath
+endgroup
+
+# One sigh on demand (map a key to `shader_event sigh`).
+startgroup
+    animation_start user:sigh
+    animation_stop 900
+    animation_curve ease-in-out
+    animation_reverse 2600
+    animation_step 33
+    var int MODE = 2
+    shaders breath
+endgroup
+
+# Debug: paint the pixels the breath may light (map a key to `shader_event breath-debug`).
+startgroup
+    animation_toggle user:breath-debug
+    animation_step 0
+    var int MODE = 3
+    shaders breath
+endgroup
