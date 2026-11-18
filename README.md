@@ -20,6 +20,8 @@ map f12 shader_event sigh
 map f11 shader_event breath-debug
 ```
 
+On a Mac keyboard, F11 and F12 may need `fn`, or pick other keys.
+
 Then reload kitty's config (`ctrl+shift+f5`, or `ctrl+cmd+,` on macOS) and move the mouse over an empty part of the window.
 
 The breath redraws every 33 ms while kitty is open, like any animated kitty shader.
@@ -33,10 +35,10 @@ python3 ~/src/kitty-breath/palette.py           # go to the next palette
 python3 ~/src/kitty-breath/palette.py 3-dusk    # pick one by name
 ```
 
-The switcher writes the palette into `breath.pipeline`. When it runs inside kitty, it also makes that kitty reload its config. Otherwise it tells you to reload. To switch from a key, map this action to a key you like:
+The switcher writes the palette into `breath.pipeline`. When kitty started it, it also makes that kitty reload its config. Otherwise it tells you to reload. To switch from a key, map this action to a key you like, with the full path to your clone:
 
 ```conf
-map <your key> launch --type=background python3 ~/src/kitty-breath/palette.py
+map <your key> launch --type=background python3 /full/path/to/kitty-breath/palette.py
 ```
 
 To add a palette, put a file in `palettes/` with one line per layer: `<layer> <#rrggbb> <opacity>`. The layers are `fill`, `inner` and `rim`. For example, `palettes/2-violet.conf`:
@@ -49,10 +51,10 @@ rim   #ddd2ff 0.18
 
 ## Settings
 
-Every setting is a line in `breath.pipeline`, in kitty's form `var <type> <NAME> = <value>`. A line at the top of the file applies to every group. Colors are linear RGB, not hex. To convert a hex color:
+Every setting is a line in `breath.pipeline`, in the form kitty's examples use: `var <type> <NAME> = <value>`. A line outside the groups applies to every group. Colors are linear RGB, not hex. To convert a hex color to the value a `var` line needs:
 
 ```sh
-cd ~/src/kitty-breath && python3 -c "import palette; print(palette.to_linear('#0f1017'))"
+cd ~/src/kitty-breath && python3 -c "import palette; print('float3(%.6f, %.6f, %.6f)' % tuple(palette.to_linear('#0f1017')))"
 ```
 
 | Setting | Type | Default | What it does |
@@ -64,13 +66,13 @@ cd ~/src/kitty-breath && python3 -c "import palette; print(palette.to_linear('#0
 | `MAX_SIDEBAR_PX` | float | `1200.0` | How far from the left edge to look for the divider. |
 | `KEY_TOLERANCE` | float | `0.001` | How close a pixel must be to the background color to light up. |
 | `MOUSE_RADIUS_PX` | float | `80.0` | The size of the breath at its fullest. |
-| `INHALE_SECONDS`, `HOLD_SECONDS`, `EXHALE_SECONDS` | float | `4.0`, `7.0`, `8.0` | The breath's timing. When you change them, also set `var uint BREATH_SECONDS` to their sum. |
+| `INHALE_SECONDS`, `HOLD_SECONDS`, `EXHALE_SECONDS` | float | `4.0`, `7.0`, `8.0` | The breath's timing. Together they must add up to whole seconds. |
 | `FILL_LAG_SECONDS` | float | `1.2` | How far the fill trails the rim. |
 | `FILL_COLOR`, `INNER_COLOR`, `RIM_COLOR` | float3 | from the palette | The three layers' colors. The palette switcher writes these. |
 | `FILL_OPACITY`, `INNER_OPACITY`, `RIM_OPACITY` | float | from the palette | How strongly each layer tints the background. |
 | `GLOW`, `PEAK` | float3, float | lavender, `0.05` | The sigh's color and strength. |
 
-`breath.slang` lists a few more, with a short note on each.
+`breath.slang` lists a few more at its top.
 
 ## Sidebar mode for herdr
 
@@ -92,13 +94,14 @@ If nothing shows, turn on the debug view first (`shader_event breath-debug`, F11
 git -C ~/src/kitty-breath pull --rebase --autostash
 ```
 
-This keeps your palette and settings. If the pull stops on a conflict in `breath.pipeline`, reset the file, pull again, and pick your palette again:
+This keeps your palette and settings. If the pull says that applying your changes resulted in conflicts, the update is in, and `breath.pipeline` holds conflict markers that kitty cannot load. Take the new file, then pick your palette again:
 
 ```sh
-git -C ~/src/kitty-breath checkout breath.pipeline
-git -C ~/src/kitty-breath pull --rebase
+git -C ~/src/kitty-breath checkout HEAD -- breath.pipeline
 python3 ~/src/kitty-breath/palette.py 2-violet
 ```
+
+Your old palette and settings are still in git's stash. Look at them with `git -C ~/src/kitty-breath stash show -p`, set again any line you had changed, such as `var int REGION = 1`, then run `git -C ~/src/kitty-breath stash drop`.
 
 ## Checks
 
@@ -106,7 +109,7 @@ python3 ~/src/kitty-breath/palette.py 2-violet
 cd ~/src/kitty-breath && python3 -m unittest
 ```
 
-The tests cover the palette switcher and compile the shader with the `slangc` that ships inside kitty. If kitty is not on your `PATH` or in `/Applications`, set `SLANGC` to the path of its `slangc`. `python3 check_shader.py` runs only the compile.
+The tests cover the palette switcher and compile the shader with the `slangc` that ships inside kitty, so they need kitty itself. If kitty is not on your `PATH` or in `/Applications`, set `KITTY` to its path. Set `SLANGC` only when its `slangc` is not next to it. When the run ends with `OK (skipped=2)`, kitty was not found and the shader did not compile. `python3 check_shader.py` runs only the compile, and it fails loudly when kitty is missing.
 
 ## License
 
