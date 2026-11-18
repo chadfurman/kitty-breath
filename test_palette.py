@@ -31,6 +31,12 @@ class RenderVarsTest(unittest.TestCase):
             "var float RIM_OPACITY = 0.5",
         ])
 
+    def test_linearizes_midtones_channel_by_channel(self):
+        for hex_color, expected in (("#0f1017", [0.004777, 0.005182, 0.008568]),
+                                    ("#d6ccff", [0.672443, 0.603827, 1.0])):
+            for got, want in zip(palette.to_linear(hex_color), expected):
+                self.assertAlmostEqual(got, want, places=6)
+
 
 class ReplaceBlockTest(unittest.TestCase):
     def test_replaces_lines_between_the_markers(self):
@@ -57,17 +63,37 @@ class NamesTest(unittest.TestCase):
         self.assertEqual(palette.next_name(all_names, None), "a")
 
 
+def reload(env, names, parent=7, kill=None):
+    kill = kill or mock.Mock()
+    done = palette.reload_kitty(env, kill=kill, parent=lambda: parent, name_of=lambda pid: names.get(pid, ""))
+    return done, kill
+
+
 class ReloadTest(unittest.TestCase):
     def test_reload_signals_kitty_pid(self):
-        kill = mock.Mock()
-        self.assertTrue(palette.reload_kitty({"KITTY_PID": "42"}, kill=kill))
+        done, kill = reload({"KITTY_PID": "42"}, {42: "kitty", 7: "kitty"})
+        self.assertTrue(done)
         kill.assert_called_once_with(42, signal.SIGUSR1)
 
-    def test_reload_without_kitty_pid_prints_how(self):
-        kill = mock.Mock()
-        for env in ({}, {"KITTY_PID": "abc"}, {"KITTY_PID": "0"}, {"KITTY_PID": "-5"}):
-            self.assertFalse(palette.reload_kitty(env, kill=kill))
+    def test_reload_signals_a_kitty_parent_without_kitty_pid(self):
+        done, kill = reload({}, {7: "kitty"})
+        self.assertTrue(done)
+        kill.assert_called_once_with(7, signal.SIGUSR1)
+
+    def test_reload_skips_a_pid_that_is_not_kitty(self):
+        done, kill = reload({"KITTY_PID": "42"}, {42: "python3", 7: "zsh"})
+        self.assertFalse(done)
         kill.assert_not_called()
+
+    def test_reload_treats_a_failed_signal_as_no_reload(self):
+        done, _ = reload({"KITTY_PID": "42"}, {42: "kitty"}, kill=mock.Mock(side_effect=ProcessLookupError))
+        self.assertFalse(done)
+
+    def test_reload_without_kitty_pid_prints_how(self):
+        for env in ({}, {"KITTY_PID": "abc"}, {"KITTY_PID": "0"}, {"KITTY_PID": "-5"}):
+            done, kill = reload(env, {}, parent=7)
+            self.assertFalse(done)
+            kill.assert_not_called()
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict("os.environ", {}, clear=True):
             folder = make_clone(Path(tmp))
             out = run_main(folder, ["b"])
@@ -88,6 +114,17 @@ class MainTest(unittest.TestCase):
             "# palette: b\nvar float3 FILL_COLOR = float3(1.000000, 1.000000, 1.000000)\nvar float FILL_OPACITY = 0.2\n",
         )
         self.assertEqual(text, expected)
+
+    def test_main_rejects_a_pipeline_without_the_palette_block(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict("os.environ", {}, clear=True):
+            folder = make_clone(Path(tmp))
+            bare = "startgroup\n    shaders breath\nendgroup\n"
+            (folder / "breath.pipeline").write_text(bare)
+            out = run_main(folder, ["b"])
+            text = (folder / "breath.pipeline").read_text()
+        self.assertEqual(out.code, 1)
+        self.assertEqual(text, bare)
+        self.assertIn("palette:start", out.stderr)
 
     def test_main_rejects_an_unknown_palette(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict("os.environ", {}, clear=True):
@@ -116,8 +153,11 @@ def run_main(folder, args):
     out, err = io.StringIO(), io.StringIO()
     with mock.patch.object(palette, "PALETTES", folder / "palettes"), \
             mock.patch.object(palette, "PIPELINE", folder / "breath.pipeline"), \
+            mock.patch("os.kill") as kill, \
+            mock.patch.object(palette, "process_name", lambda pid: ""), \
             redirect_stdout(out), redirect_stderr(err):
         code = palette.main(args)
+    kill.assert_not_called()
     return Result(code, out.getvalue(), err.getvalue())
 
 
