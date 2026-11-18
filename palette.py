@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
+import os
 import re
+import signal
+import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -31,3 +34,40 @@ def replace_block(text, lines):
 def current_name(text):
     match = re.search(r"^# palette: (\S+)$", text, re.M)
     return match.group(1) if match else None
+
+
+def names(folder=PALETTES):
+    return sorted(p.stem for p in folder.glob("*.conf"))
+
+
+def next_name(all_names, current):
+    if current not in all_names:
+        return all_names[0]
+    return all_names[(all_names.index(current) + 1) % len(all_names)]
+
+
+def reload_kitty(env=os.environ, kill=os.kill):
+    pid = env.get("KITTY_PID", "")
+    if not pid.isdigit() or int(pid) <= 0:
+        return False
+    kill(int(pid), signal.SIGUSR1)
+    return True
+
+
+def main(args):
+    all_names = names(PALETTES)
+    if args and args[0] not in all_names:
+        print(f"unknown palette: {args[0]} (have: {', '.join(all_names)})", file=sys.stderr)
+        return 1
+    text = PIPELINE.read_text()
+    name = args[0] if args else next_name(all_names, current_name(text))
+    lines = render_vars(name, (PALETTES / f"{name}.conf").read_text())
+    PIPELINE.write_text(replace_block(text, lines))
+    print(f"palette: {name}")
+    if not reload_kitty():
+        print("Reload kitty's config to see it: ctrl+shift+f5, or ctrl+cmd+, on macOS.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
